@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#091727">
 <meta name="description" content="Community-shared Nusuk referral code organizer.">
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
 <title>Nusuk Key Collector</title>
 <style>
 :root{color-scheme:dark;--bg:#081321;--panel:#12243a;--panel2:#0c1a2b;--line:#29435f;--text:#f4f7fb;--muted:#a9bbcf;--gold:#e8bd69;--green:#39c48d;--red:#e87979;--blue:#8fc4ff}
@@ -31,6 +31,11 @@ a{color:#a4ceff}.hidden{display:none!important}footer{text-align:center;color:#8
 <body>
 <div class="wrap">
 <header><div class="logo">🔑</div><div><h1>Nusuk Key Collector</h1><div class="sub">Installable Community Code Organizer</div></div></header>
+<section class="card" style="text-align:center;border:1px solid #9b783d;background:linear-gradient(135deg,#172b43,#302719);padding:20px 14px">
+ <div class="small" style="letter-spacing:2px;color:#e8bd69;font-weight:800">PRESENTED BY</div>
+ <div style="font-size:clamp(29px,8vw,42px);font-weight:950;letter-spacing:.5px;color:#ffe09a;line-height:1.18;margin:8px 0;text-shadow:0 3px 18px #d6a64b66">SHAHRIAR NAFIS</div>
+ <div class="small">App Owner &amp; Maintainer</div>
+</section>
 
 <section class="card notice"><b>ব্যবহার পদ্ধতি:</b> কমিউনিটি তালিকা লোড করুন। Copy চাপলে কোডটি এই ফোনের বাকি তালিকা থেকে সরিয়ে History-তে যাবে এবং পরের কোড দেখাবে। এরপর Nusuk অ্যাপে নিজে কোড বসিয়ে Check করুন। এই অ্যাপ নিজে Submit বা Verify করে না।</section>
 
@@ -54,7 +59,7 @@ a{color:#a4ceff}.hidden{display:none!important}footer{text-align:center;color:#8
 <section class="card">
 <div class="label">বড় কোড তালিকা</div>
 <div class="small">Umrah Codes-এর প্রকাশ্য API থেকে পূর্ণ তালিকা আনার চেষ্টা করবে। API প্রকাশকের নিয়ম অনুযায়ী ১৫ মিনিটের আগে আবার ডাউনলোড করবে না; আগের ডেটা এই ফোনে ক্যাশ থাকবে।</div>
-<div class="row" style="margin-top:10px"><button class="primary" id="loadBtn">⬇ ৭০ হাজার+ কোড লোড / আপডেট</button><button class="secondary" id="resetQueueBtn">এই ফোনের Queue রিসেট</button></div>
+<div class="row" style="margin-top:10px"><button class="primary" id="loadBtn">⬇ সম্পূর্ণ কোড তালিকা লোড / আপডেট</button><button class="secondary" id="resetQueueBtn">এই ফোনের Queue রিসেট</button></div>
 <div class="small" id="sourceInfo" style="margin-top:9px">উৎস: Umrah Codes public API · এখনো লোড হয়নি</div>
 </section>
 
@@ -85,7 +90,7 @@ a{color:#a4ceff}.hidden{display:none!important}footer{text-align:center;color:#8
 <footer>স্বাধীন কমিউনিটি সহায়ক অ্যাপ; Nusuk বা সৌদি মন্ত্রণালয়ের সঙ্গে অনুমোদিত/সম্পৃক্ত নয়। প্রতি ডিভাইসে আলাদা লোকাল ডেটা। API-র fair-use নিয়ম: একই ফাইল সর্বোচ্চ ১৫ মিনিটে একবার সংগ্রহ ও ক্যাশ।</footer>
 </div>
 <script>
-const API="https://umrahcodes.click/open-data/v1/codes.txt";
+const API="https://umrahcodes.click/open-data/v1/codes.json";
 const API_META="https://umrahcodes.click/open-data/v1/meta.json";
 const DB_NAME="NusukKeyCollectorDB", DB_VERSION=1;
 const $=id=>document.getElementById(id);
@@ -111,40 +116,62 @@ async function refresh(){
  renderHistory();
 }
 function renderHistory(){const host=$("historyList");host.innerHTML="";const rows=[...copied,...failed].sort((a,b)=>(b.usedAt||0)-(a.usedAt||0));for(const x of rows.slice(0,500)){const row=document.createElement("div");row.className="entry";const label=document.createElement("span");label.textContent=x.code;const info=document.createElement("small");info.textContent=x.state==="success"?"Key পেয়েছি":x.state==="failed"?"কাজ করেনি":"কপি করা";const b=document.createElement("button");b.className="secondary";b.textContent="আবার Queue";b.onclick=async()=>{const s=tx("codes","readwrite");s.put({...x,state:"pending",usedAt:null});await refresh();$("message").textContent="কোডটি আবার Queue-তে ফেরানো হয়েছে।"};row.append(label,info,b);host.append(row)}}
-async function mergeCodes(codes){const s=db.transaction("codes","readwrite").objectStore("codes");let added=0;let order=(await allCodes()).length;for(const code of codes){if(!/^NG-[A-Za-z0-9]{8}$/.test(code))continue;const exists=await reqPromise(s.get(code));if(!exists){s.put({code,state:"pending",order:order++,usedAt:null});added++;}}return added;}
+async function mergeCodes(codes){
+ const existing=await allCodes();
+ const seen=new Set(existing.map(x=>x.code));
+ let order=existing.reduce((m,x)=>Math.max(m,(x.order||0)+1),0),added=0;
+ const s=db.transaction("codes","readwrite").objectStore("codes");
+ for(const raw of codes){
+  const code=typeof raw==="string"?raw:raw?.code;
+  if(!/^NG-[A-Za-z0-9]{8}$/.test(code)||seen.has(code))continue;
+  seen.add(code);s.put({code,state:"pending",order:order++,usedAt:null});added++;
+ }
+ return added;
+}
 async function loadOnline(){
  $("loadBtn").disabled=true;$("sourceInfo").textContent="পূর্ণ কোড তালিকা ডাউনলোড হচ্ছে…";
  try{
-  const cachedAt=await getMeta("lastFetch"), now=Date.now();
-  let text, updatedLabel="ক্যাশ করা তালিকা";
-  if(cachedAt && now-cachedAt.value<15*60*1000){
-    text=(await reqPromise(tx("meta").get("codesText")))?.value;
-    if(!text)throw Error("No cached dataset");
+  const cachedAt=await getMeta("lastFetch"),now=Date.now();
+  let dataset,updatedLabel="ক্যাশ করা তালিকা";
+  if(cachedAt&&now-cachedAt.value<15*60*1000){
+   dataset=(await reqPromise(tx("meta").get("codesData")))?.value;
+   if(!dataset||!Array.isArray(dataset.codes))throw Error("No cached dataset");
   }else{
-    const res=await fetch(API,{cache:"no-store"});if(!res.ok)throw Error("API HTTP "+res.status);
-    text=await res.text();if(text.length<100)throw Error("Empty API response");
-    const metaRes=await fetch(API_META,{cache:"no-store"}).catch(()=>null);
-    let meta=null;if(metaRes&&metaRes.ok)meta=await metaRes.json();
-    await putMeta("codesText",text);await putMeta("lastFetch",now);if(meta)await putMeta("apiMeta",meta);
-    updatedLabel="সার্ভার থেকে আপডেট";
+   const res=await fetch(API,{cache:"no-store"});
+   if(!res.ok)throw Error("API HTTP "+res.status);
+   dataset=await res.json();
+   if(!dataset||!Array.isArray(dataset.codes))throw Error("Unexpected API response");
+   await putMeta("codesData",dataset);await putMeta("lastFetch",now);
+   updatedLabel="সার্ভার থেকে আপডেট";
   }
-  const codes=[...new Set(text.match(/NG-[A-Za-z0-9]{8}/g)||[])];
-  const added=await mergeCodes(codes);await refresh();
-  const meta=await getMeta("apiMeta");
-  $("sourceInfo").textContent=`${updatedLabel}: ${codes.length.toLocaleString("en-US")}টি আলাদা কোড পাওয়া গেছে; ${added.toLocaleString("en-US")}টি নতুন করে এই ফোনের Queue-তে যোগ হয়েছে। ${meta?.value?.updatedAt? "উৎস আপডেট: "+meta.value.updatedAt:""}`;
+  const codes=dataset.codes.map(x=>typeof x==="string"?x:x?.code).filter(Boolean);
+  const unique=[...new Set(codes)];
+  const added=await mergeCodes(unique);await refresh();
+  $("sourceInfo").textContent=updatedLabel+": "+unique.length.toLocaleString("en-US")+"টি আলাদা কোড পাওয়া গেছে; "+added.toLocaleString("en-US")+"টি নতুন কোড এই ফোনের Queue-তে যোগ হয়েছে। "+(dataset.updatedAt?"উৎস আপডেট: "+dataset.updatedAt:"");
   $("message").textContent="কোড তালিকা প্রস্তুত। Copy & Next চাপলে বর্তমান কোড History-তে যাবে।";
  }catch(e){
-  const saved=await reqPromise(tx("meta").get("codesText")).catch(()=>null);
-  if(saved?.value){const codes=[...new Set(saved.value.match(/NG-[A-Za-z0-9]{8}/g)||[])];const added=await mergeCodes(codes);await refresh();$("sourceInfo").textContent=`ইন্টারনেট পাওয়া যায়নি; আগের ক্যাশ থেকে ${codes.length.toLocaleString("en-US")}টি কোড পড়া হয়েছে; ${added}টি নতুন যোগ হয়েছে।`;}
-  else $("sourceInfo").textContent="কোড তালিকা আনা যায়নি। ইন্টারনেট পরীক্ষা করে পরে আবার চেষ্টা করুন।";
+  const saved=await reqPromise(tx("meta").get("codesData")).catch(()=>null);
+  if(saved?.value?.codes){
+   const codes=saved.value.codes.map(x=>typeof x==="string"?x:x?.code).filter(Boolean);
+   const added=await mergeCodes(codes);await refresh();
+   $("sourceInfo").textContent="ইন্টারনেট পাওয়া যায়নি; আগের ক্যাশ থেকে "+codes.length.toLocaleString("en-US")+"টি কোড পাওয়া গেছে; "+added+"টি নতুন যোগ হয়েছে।";
+  }else{
+   $("sourceInfo").textContent="কোড তালিকা আনা যায়নি। ইন্টারনেট পরীক্ষা করে আবার চেষ্টা করুন।";
+  }
   $("message").textContent="অনলাইন তালিকা লোড করা যায়নি।";
  }finally{$("loadBtn").disabled=false;}
 }
 async function takeCurrent(state="copied"){
- const p=await getPending();if(!p.length)return null;const item=p[0];const s=tx("codes","readwrite");s.put({...item,state,usedAt:Date.now()});await refresh();return item.code;
+ const p=await getPending();if(!p.length)return null;const item=p[0];tx("codes","readwrite").put({...item,state,usedAt:Date.now()});await putMeta("lastCopiedCode",item.code);await refresh();return item.code;
+}
+async function markLastCopied(state){
+ const last=await getMeta("lastCopiedCode");if(!last?.value)return;
+ const item=await reqPromise(tx("codes").get(last.value));if(!item||item.state!=="copied")return;
+ tx("codes","readwrite").put({...item,state,usedAt:Date.now()});await refresh();
+ $("message").textContent=state==="success"?"সর্বশেষ কপি করা কোড Key পেয়েছে হিসেবে চিহ্নিত হয়েছে।":"সর্বশেষ কপি করা কোড কাজ করেনি হিসেবে চিহ্নিত হয়েছে।";
 }
 $("copyBtn").onclick=async()=>{const p=await getPending();if(!p.length)return;const code=p[0].code;try{await navigator.clipboard.writeText(code);}catch(e){$("message").textContent="Clipboard permission পাওয়া যায়নি। Chrome-এ অনুমতি দিন।";return;}await takeCurrent("copied");$("message").textContent=`${code} কপি হয়েছে এবং এই ফোনের Pending Queue থেকে সরানো হয়েছে। পরের কোড প্রস্তুত।`;};
-$("openBtn").onclick=()=>window.open("https://www.nusuk.sa/","_blank","noopener");
+$("openBtn").onclick=async()=>{const p=await getPending();if(p.length)window.open("https://services.nusuk.sa/app/?p=27&id="+encodeURIComponent(p[0].code),"_blank","noopener");};
 $("successBtn").onclick=()=>markLastCopied("success");
 $("badBtn").onclick=()=>markLastCopied("failed");
 $("loadBtn").onclick=loadOnline;
@@ -158,6 +185,19 @@ $("installBtn").onclick=async()=>{if(installedPrompt){installedPrompt.prompt();a
 $("shareBtn").onclick=async()=>{if(navigator.share){await navigator.share({title:"Nusuk Key Collector",url:location.href});}else{await navigator.clipboard.writeText(location.href);alert("অ্যাপের লিংক কপি হয়েছে।");}};
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installedPrompt=e;});
 if("serviceWorker" in navigator && location.protocol.startsWith("http"))window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
-(async()=>{try{db=await openDB();await refresh();const saved=await reqPromise(tx("meta").get("codesText"));if(saved?.value){const c=[...new Set(saved.value.match(/NG-[A-Za-z0-9]{8}/g)||[])];await mergeCodes(c);await refresh();$("sourceInfo").textContent=`এই ফোনে ক্যাশ করা ${c.length.toLocaleString("en-US")}টি কোড পাওয়া গেছে।`;}}catch(e){$("message").textContent="এই ব্রাউজারে IndexedDB চালু করা যায়নি। Chrome ব্যবহার করুন।";}})();
+(async()=>{try{
+ db=await openDB();await refresh();
+ const existing=await allCodes();
+ const saved=await reqPromise(tx("meta").get("codesData"));
+ if(saved?.value?.codes){
+  const codes=saved.value.codes.map(x=>typeof x==="string"?x:x?.code).filter(Boolean);
+  await mergeCodes(codes);await refresh();
+  $("sourceInfo").textContent="এই ফোনে ক্যাশ করা "+codes.length.toLocaleString("en-US")+"টি কোড পাওয়া গেছে।";
+ }
+ if(existing.length===0){
+  $("message").textContent="প্রথমবার চালু হয়েছে—কোড তালিকা নিজে থেকেই লোড হচ্ছে…";
+  await loadOnline();
+ }
+ }catch(e){$("message").textContent="এই ব্রাউজারে ডেটাবেস চালু করা যায়নি। Chrome ব্যবহার করুন।";}})();;
 </script>
 </body></html>
